@@ -74,9 +74,51 @@ function getUrlsFromSheetAndColumn(sheetName, columnIndex) {
 }
 
 function checkUrls(urls, options) {
+  var urlChecks = [];
+  var checkedUrls = [];
+
   for (var i = 0; i < urls.length; i++) {
-    var responseCode = requestUrl(urls[i], options, {});
+    if (!urls[i]) {
+      return;
+    }
+
+    var urlsToCheck = expandUrlModifiers(urls[i]);
+
+    for (var j = 0; j < urlsToCheck.length; j++) {
+      var expandedUrl = urlsToCheck[j];
+      if (checkedUrls[expandedUrl]) {
+        continue;
+      }
+
+      var entityDetails = {
+        entityType: 'type',
+        campaign: 'campaign',
+        adGroup: 'ad group',
+        ad: 'ad',
+        keyword: 'keyword',
+        sitelink: 'sitelink'
+      };
+
+      var responseCode = requestUrl(expandedUrl, options, entityDetails);
+
+      urlChecks.push({
+        customerId: 'customer id',
+        timestamp: new Date(),
+        url: expandedUrl,
+        responseCode: (options.exceptionUrls.indexOf(expandedUrl) !== -1) ? 'EXCEPTION' : responseCode,
+        entityType: entityDetails.entityType,
+        campaign: entityDetails.campaign,
+        adGroup: entityDetails.adGroup,
+        ad: entityDetails.ad,
+        keyword: entityDetails.keyword,
+        sitelink: entityDetails.sitelink
+      });
+
+      checkedUrls[expandedUrl] = true;
+    }
   }
+
+  return urlChecks;
 }
 
 var CONFIG = {
@@ -154,4 +196,58 @@ function bodyContainsFailureStrings(response, failureStrings) {
 
 function bodyContainsFailureHtmls(response, failureHtmls) {
   return bodyContainsFailureStrings(response, failureHtmls);
+}
+
+function expandUrlModifiers(url) {
+  var ifRegex = /({(if\w+):([^}]+)})/gi;
+  var modifiers = {};
+  var matches;
+
+  while (matches = ifRegex.exec(url)) {
+    modifiers[matches[2].toLowerCase()] = {
+      substitute: matches[0],
+      replacement: matches[3]
+    };
+  }
+  if (Object.keys(modifiers).length) {
+    if (modifiers.ifmobile || modifiers.ifnotmobile) {
+      var mobileCombinations =
+        pairedUrlModifierReplace(modifiers, 'ifmobile', 'ifnotmobile', url);
+    } else {
+      var mobileCombinations = [url];
+    }
+
+    var combinations = {};
+    mobileCombinations.forEach(function(url) {
+      if (modifiers.ifsearch || modifiers.ifcontent) {
+        pairedUrlModifierReplace(modifiers, 'ifsearch', 'ifcontent', url)
+          .forEach(function(modifiedUrl) {
+            combinations[modifiedUrl] = true;
+          });
+      } else {
+        combinations[url] = true;
+      }
+    });
+    var modifiedUrls = Object.keys(combinations);
+  } else {
+    var modifiedUrls = [url];
+  }
+
+  return modifiedUrls.map(function(url) {
+    return url.replace(/{[0-9a-zA-Z\_\+\:]+}/g, '');
+  });
+}
+
+function pairedUrlModifierReplace(modifiers, modifier1, modifier2, url) {
+  return [
+    urlModifierReplace(modifiers, modifier1, modifier2, url),
+    urlModifierReplace(modifiers, modifier2, modifier1, url)
+  ];
+}
+
+function urlModifierReplace(mods, mod1, mod2, url) {
+  var modUrl = mods[mod1] ?
+    url.replace(mods[mod1].substitute, mods[mod1].replacement) :
+    url;
+  return mods[mod2] ? modUrl.replace(mods[mod2].substitute, '') : modUrl;
 }
