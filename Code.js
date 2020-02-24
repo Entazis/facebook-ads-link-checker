@@ -18,6 +18,8 @@ var options = {
   useSimpleFailureHtmls: true,
   useExceptionUrls: true,
   useCustomValidation: false,
+  numErrors: 'results!C1',
+  resultHeaders: 'results!B3:K3'
 };
 
 function isValidResponse(url, response, options, entityDetails) {
@@ -54,9 +56,8 @@ function isValidResponse(url, response, options, entityDetails) {
 
 function main() {
   var urlsToCheck = getUrlsFromSheetAndColumn('landing pages with status code', 4);
-  checkUrls(urlsToCheck, options);
-
-  return 0;
+  var urlChecks = checkUrls(urlsToCheck, options);
+  outputResults(urlChecks, options);
 }
 
 function getUrlsFromSheetAndColumn(sheetName, columnIndex) {
@@ -250,4 +251,56 @@ function urlModifierReplace(mods, mod1, mod2, url) {
     url.replace(mods[mod1].substitute, mods[mod1].replacement) :
     url;
   return mods[mod2] ? modUrl.replace(mods[mod2].substitute, '') : modUrl;
+}
+
+function outputResults(urlChecks, options) {
+  var spreadsheet = SpreadsheetApp.getActive();
+
+  var numErrors = countErrors(urlChecks, options);
+  Logger.log('Found ' + numErrors + ' this execution.');
+
+  saveUrlsToSpreadsheet(spreadsheet, urlChecks, options);
+}
+
+function saveUrlsToSpreadsheet(spreadsheet, urlChecks, options) {
+  var outputValues = [];
+  for (var i = 0; i < urlChecks.length; i++) {
+    var urlCheck = urlChecks[i];
+
+    if (options.saveAllUrls ||
+      options.validCodes.indexOf(urlCheck.responseCode) === -1) {
+      outputValues.push([
+        urlCheck.customerId,
+        new Date(urlCheck.timestamp),
+        urlCheck.url,
+        urlCheck.responseCode,
+        urlCheck.entityType,
+        urlCheck.campaign,
+        urlCheck.adGroup,
+        urlCheck.ad,
+        urlCheck.keyword,
+        urlCheck.sitelink
+      ]);
+    }
+  }
+
+  if (outputValues.length > 0) {
+    var headers = spreadsheet.getRangeByName(options.resultHeaders);
+    var lastRow = headers.getSheet().getDataRange().getLastRow();
+    var outputRange = headers.offset(lastRow - headers.getRow() + 1,
+      0, outputValues.length);
+    outputRange.setValues(outputValues);
+  }
+}
+
+function countErrors(urlChecks, options) {
+  var numErrors = 0;
+
+  for (var i = 0; i < urlChecks.length; i++) {
+    if (options.validCodes.indexOf(urlChecks[i].responseCode) === -1) {
+      numErrors++;
+    }
+  }
+
+  return numErrors;
 }
