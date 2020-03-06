@@ -22,7 +22,19 @@ var options = {
   resultHeaders: 'results!B3:K3'
 };
 
-function isValidResponse(url, response, options, entityDetails) {
+function getStatusCode(url){
+    if (!url) return false;
+
+    var optionsForGettingSimpleStatusCode = {
+        'muteHttpExceptions': true,
+        'followRedirects': false
+    };
+    var url_trimmed = url.trim();
+    var response = UrlFetchApp.fetch(url_trimmed, optionsForGettingSimpleStatusCode);
+    return response.getResponseCode();
+}
+
+function isValidResponse(url, response, entityDetails) {
   // The HTTP status code, e.g. 200, 404
   // var responseCode = response.getResponseCode();
 
@@ -56,8 +68,8 @@ function isValidResponse(url, response, options, entityDetails) {
 
 function main() {
   var urlsToCheck = getUrlsFromSheetAndColumn('landing pages with status code', 4);
-  var urlChecks = checkUrls(urlsToCheck, options);
-  outputResults(urlChecks, options);
+  var urlChecks = checkUrls(urlsToCheck);
+  outputResults(urlChecks);
 }
 
 function getUrlsFromSheetAndColumn(sheetName, columnIndex) {
@@ -70,11 +82,11 @@ function getUrlsFromSheetAndColumn(sheetName, columnIndex) {
   }
 
   return urls.filter(function (url) {
-    return url != '';
+    return url !== '';
   });
 }
 
-function checkUrls(urls, options) {
+function checkUrls(urls) {
   var urlChecks = [];
   var checkedUrls = [];
 
@@ -100,7 +112,7 @@ function checkUrls(urls, options) {
         sitelink: 'sitelink'
       };
 
-      var responseCode = requestUrl(expandedUrl, options, entityDetails);
+      var responseCode = requestUrl(expandedUrl, entityDetails);
 
       urlChecks.push({
         customerId: 'customer id',
@@ -139,7 +151,7 @@ var EXCEPTIONS = {
   TIMEOUT: 'Approached script execution time limit'
 };
 
-function requestUrl(url, options, entityDetails) {
+function requestUrl(url, entityDetails) {
   var responseCode;
   var sleepTime = QUOTA_CONFIG.INIT_SLEEP_TIME;
   var numTries = 0;
@@ -203,6 +215,8 @@ function expandUrlModifiers(url) {
   var ifRegex = /({(if\w+):([^}]+)})/gi;
   var modifiers = {};
   var matches;
+  var mobileCombinations;
+  var modifiedUrls;
 
   while (matches = ifRegex.exec(url)) {
     modifiers[matches[2].toLowerCase()] = {
@@ -212,10 +226,10 @@ function expandUrlModifiers(url) {
   }
   if (Object.keys(modifiers).length) {
     if (modifiers.ifmobile || modifiers.ifnotmobile) {
-      var mobileCombinations =
+      mobileCombinations =
         pairedUrlModifierReplace(modifiers, 'ifmobile', 'ifnotmobile', url);
     } else {
-      var mobileCombinations = [url];
+      mobileCombinations = [url];
     }
 
     var combinations = {};
@@ -229,9 +243,9 @@ function expandUrlModifiers(url) {
         combinations[url] = true;
       }
     });
-    var modifiedUrls = Object.keys(combinations);
+    modifiedUrls = Object.keys(combinations);
   } else {
-    var modifiedUrls = [url];
+    modifiedUrls = [url];
   }
 
   return modifiedUrls.map(function(url) {
@@ -253,7 +267,7 @@ function urlModifierReplace(mods, mod1, mod2, url) {
   return mods[mod2] ? modUrl.replace(mods[mod2].substitute, '') : modUrl;
 }
 
-function outputResults(urlChecks, options) {
+function outputResults(urlChecks) {
   var spreadsheet = SpreadsheetApp.getActive();
 
   var numErrors = countErrors(urlChecks, options);
@@ -262,7 +276,7 @@ function outputResults(urlChecks, options) {
   saveUrlsToSpreadsheet(spreadsheet, urlChecks, options);
 }
 
-function saveUrlsToSpreadsheet(spreadsheet, urlChecks, options) {
+function saveUrlsToSpreadsheet(spreadsheet, urlChecks) {
   var outputValues = [];
   for (var i = 0; i < urlChecks.length; i++) {
     var urlCheck = urlChecks[i];
@@ -293,7 +307,7 @@ function saveUrlsToSpreadsheet(spreadsheet, urlChecks, options) {
   }
 }
 
-function countErrors(urlChecks, options) {
+function countErrors(urlChecks) {
   var numErrors = 0;
 
   for (var i = 0; i < urlChecks.length; i++) {
