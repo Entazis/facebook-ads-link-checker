@@ -23,7 +23,7 @@ var options = {
 };
 
 var namedRange = {
-    exceptionUrl: 'exceptionUrl'
+    exceptionUrl: 'exceptionUrls'
 };
 
 var CONFIG = {
@@ -134,7 +134,7 @@ function checkUrls(urls) {
       };
 
       var responseCode = requestUrl(expandedUrl, entityDetails);
-      var exceptionUrls = loadDatabyName(SpreadsheetApp.getActive(), namedRange.exceptionUrl);
+      var exceptionUrls = loadDatabyName(SpreadsheetApp.getActive(), [namedRange.exceptionUrl]).exceptionUrls;
 
       urlChecks.push({
         customerId: 'customer id',
