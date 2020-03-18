@@ -134,13 +134,12 @@ function checkUrls(urls) {
       };
 
       var responseCode = requestUrl(expandedUrl, entityDetails);
-      var exceptionUrls = loadDatabyName(SpreadsheetApp.getActive(), [namedRange.exceptionUrl]).exceptionUrls;
 
       urlChecks.push({
         customerId: 'customer id',
         timestamp: new Date(),
         url: expandedUrl,
-        responseCode: (exceptionUrls.indexOf(expandedUrl) !== -1) ? 'EXCEPTION' : responseCode,
+        responseCode: responseCode,
         entityType: entityDetails.entityType,
         campaign: entityDetails.campaign,
         adGroup: entityDetails.adGroup,
@@ -160,6 +159,7 @@ function requestUrl(url, entityDetails) {
   var responseCode;
   var sleepTime = QUOTA_CONFIG.INIT_SLEEP_TIME;
   var numTries = 0;
+  var exceptionUrls = loadDatabyName(SpreadsheetApp.getActive(), [namedRange.exceptionUrl]).exceptionUrls;
 
   while (numTries < QUOTA_CONFIG.MAX_TRIES && !responseCode) {
     try {
@@ -167,11 +167,12 @@ function requestUrl(url, entityDetails) {
       responseCode = response.getResponseCode();
 
       if (options.validCodes.indexOf(responseCode) !== -1) {
-        if (options.useSimpleFailureHtmls &&
+        if (exceptionUrls.indexOf(url) !== -1) {
+          responseCode = 'EXCEPTION';
+        } else if (options.useSimpleFailureHtmls &&
           bodyContainsFailureHtmls(response, options.failureHtmls)) {
           responseCode = 'Failure HTML detected';
-        }
-        else if (options.useSimpleFailureStrings &&
+        } else if (options.useSimpleFailureStrings &&
           bodyContainsFailureStrings(response, options.failureStrings)) {
           responseCode = 'Failure string detected';
         } else if (options.useCustomValidation && !isValidResponse(url,
