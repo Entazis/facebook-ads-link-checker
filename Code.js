@@ -22,6 +22,27 @@ var options = {
   resultHeaders: 'results!B3:K3'
 };
 
+var namedRange = {
+    exceptionUrl: 'exceptionUrl'
+};
+
+var CONFIG = {
+    THROTTLE: 0,
+    TIMEOUT_BUFFER: 120
+};
+
+var QUOTA_CONFIG = {
+    INIT_SLEEP_TIME: 250,
+    BACKOFF_FACTOR: 2,
+    MAX_TRIES: 5
+};
+
+var EXCEPTIONS = {
+    QPS: 'Reached UrlFetchApp QPS limit',
+    LIMIT: 'Reached UrlFetchApp daily quota',
+    TIMEOUT: 'Approached script execution time limit'
+};
+
 function getStatusCode(url){
     if (!url) return false;
 
@@ -113,12 +134,13 @@ function checkUrls(urls) {
       };
 
       var responseCode = requestUrl(expandedUrl, entityDetails);
+      var exceptionUrls = loadDatabyName(SpreadsheetApp.getActive(), namedRange.exceptionUrl);
 
       urlChecks.push({
         customerId: 'customer id',
         timestamp: new Date(),
         url: expandedUrl,
-        responseCode: (options.exceptionUrls.indexOf(expandedUrl) !== -1) ? 'EXCEPTION' : responseCode,
+        responseCode: (exceptionUrls.indexOf(expandedUrl) !== -1) ? 'EXCEPTION' : responseCode,
         entityType: entityDetails.entityType,
         campaign: entityDetails.campaign,
         adGroup: entityDetails.adGroup,
@@ -133,23 +155,6 @@ function checkUrls(urls) {
 
   return urlChecks;
 }
-
-var CONFIG = {
-  THROTTLE: 0,
-  TIMEOUT_BUFFER: 120
-};
-
-var QUOTA_CONFIG = {
-  INIT_SLEEP_TIME: 250,
-  BACKOFF_FACTOR: 2,
-  MAX_TRIES: 5
-};
-
-var EXCEPTIONS = {
-  QPS: 'Reached UrlFetchApp QPS limit',
-  LIMIT: 'Reached UrlFetchApp daily quota',
-  TIMEOUT: 'Approached script execution time limit'
-};
 
 function requestUrl(url, entityDetails) {
   var responseCode;
@@ -209,6 +214,42 @@ function bodyContainsFailureStrings(response, failureStrings) {
 
 function bodyContainsFailureHtmls(response, failureHtmls) {
   return bodyContainsFailureStrings(response, failureHtmls);
+}
+
+function loadDatabyName(spreadsheet, names) {
+    var data = {};
+
+    for (var i = 0; i < names.length; i++) {
+        var name = names[i];
+        var range = spreadsheet.getRangeByName(name);
+
+        if (range.getNumRows() > 1 && range.getNumColumns() > 1) {
+            // Name refers to a 2d range, so load it as a 2d array.
+            data[name] = range.getValues();
+        } else if (range.getNumRows() === 1 && range.getNumColumns() === 1) {
+            // Name refers to a single cell, so load it as a value and replace
+            // Yes/No with boolean true/false.
+            data[name] = range.getValue();
+            data[name] = data[name] === 'Yes' ? true : data[name];
+            data[name] = data[name] === 'No' ? false : data[name];
+        } else {
+            // Name refers to a 1d range, so load it as an array (regardless of
+            // whether the 1d range is oriented horizontally or vertically).
+            var isByRow = range.getNumRows() > 1;
+            var limit = isByRow ? range.getNumRows() : range.getNumColumns();
+            var cellValues = range.getValues();
+
+            data[name] = [];
+            for (var j = 0; j < limit; j++) {
+                var cellValue = isByRow ? cellValues[j][0] : cellValues[0][j];
+                if (cellValue) {
+                    data[name].push(cellValue);
+                }
+            }
+        }
+    }
+
+    return data;
 }
 
 function expandUrlModifiers(url) {
